@@ -1,4 +1,4 @@
-# Claude API Portfolio
+# Claude Bedrock API Portfolio
 
 Hands-on explorations of the Claude ecosystem — API fundamentals, prompting & tool use, Claude Code workflows, and Model Context Protocol basics.
 
