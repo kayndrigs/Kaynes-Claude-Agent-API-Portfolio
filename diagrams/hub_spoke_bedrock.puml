@@ -1,0 +1,98 @@
+@startuml hub_spoke_bedrock
+
+title Hub-and-Spoke Multi-Agent Architecture\nAWS Bedrock (ap-southeast-1) — Claude Sonnet 4.6
+
+skinparam backgroundColor #ffffff
+skinparam defaultFontColor #1e1e2e
+skinparam defaultFontName Monospaced
+skinparam ArrowColor #1e66f5
+skinparam SequenceLifeLineBorderColor #9ca0b0
+
+skinparam participant {
+    BackgroundColor #eff1f5
+    BorderColor #9ca0b0
+    FontColor #1e1e2e
+}
+
+skinparam database {
+    BackgroundColor #dce0e8
+    BorderColor #9ca0b0
+    FontColor #1e1e2e
+}
+
+skinparam note {
+    BackgroundColor #e6e9ef
+    BorderColor #9ca0b0
+    FontColor #4c4f69
+}
+
+actor       User            as U        #89dceb
+participant "Hub\n(Coordinator)"        as HUB      #cba6f7
+participant "Spoke 1\nWeb Researcher"   as WEB      #a6e3a1
+participant "Spoke 2\nDoc Analyzer"     as DOC      #fab387
+participant "Spoke 3\nSynthesizer"      as SYN      #f9e2af
+participant "Spoke 4\nReport Writer"    as RPT      #89b4fa
+database    "ResearchState\n(Pydantic)" as STATE    #585b70
+participant "Bedrock\nConverse API"     as BEDROCK  #f38ba8
+
+== Stage 1: Goal Decomposition ==
+
+U -> HUB : goal (string)
+HUB -> BEDROCK : converse(HUB_PROMPT, goal)
+BEDROCK --> HUB : JSON list of subtasks\n[{agent, task}, ...]
+HUB -> STATE : store subtasks\n(local Python list)
+note right of HUB
+  stop_reason: end_turn
+  No tools used
+end note
+
+== Stage 2: Discovery Spokes ==
+
+HUB -> WEB : subtask {agent: WebResearcher, task}
+WEB -> BEDROCK : converse(WEB_RESEARCHER_PROMPT,\ntask, toolConfig)
+BEDROCK --> WEB : stop_reason: tool_use\n[simulate_web_search(query)]
+WEB -> WEB : execute simulate_web_search()
+WEB -> BEDROCK : converse(..., tool_result)
+BEDROCK --> WEB : stop_reason: end_turn\nraw text findings
+WEB -> STATE : state.raw_web.append(result)
+
+HUB -> DOC : subtask {agent: DocAnalyzer, task}
+DOC -> BEDROCK : converse(DOC_ANALYZER_PROMPT,\ntask, toolConfig)
+BEDROCK --> DOC : stop_reason: tool_use\n[extract_document_data(topic)]
+DOC -> DOC : execute extract_document_data()
+DOC -> BEDROCK : converse(..., tool_result)
+BEDROCK --> DOC : stop_reason: end_turn\nraw extracted data
+DOC -> STATE : state.raw_doc.append(result)
+
+== Stage 3: Synthesis (Hard Wall) ==
+
+STATE -> SYN : state.raw_web + state.raw_doc\n(concatenated strings)
+SYN -> BEDROCK : converse(SYNTHESIZER_PROMPT,\nraw combined data)\nno tools
+BEDROCK --> SYN : JSON only — FactBase schema\n(no prose, no markdown)
+SYN -> SYN : FactBase.model_validate_json()\nPydantic validation
+note right of SYN
+  ⛔ ValidationError raised here
+  if JSON is malformed —
+  pipeline halts immediately
+end note
+SYN -> STATE : state.fact_base = fact_base.model_dump()
+
+== Stage 4: Report Generation ==
+
+STATE -> RPT : state.fact_base (dict → JSON string)\nNO raw data passed
+RPT -> BEDROCK : converse(REPORT_WRITER_PROMPT,\nfact_base_json)\nno tools
+BEDROCK --> RPT : Markdown executive report\n(only facts from Fact Base)
+RPT -> STATE : state.final_report = markdown
+
+== Output ==
+
+STATE -> U : state.final_report\n(rich Markdown render)
+STATE -> U : state.fact_base\n(rich Panel JSON inspect)
+
+note over STATE
+  ResearchState is the ONLY communication channel.
+  Agents never call each other directly.
+  Each stage receives an immutable copy via model_copy().
+end note
+
+@enduml

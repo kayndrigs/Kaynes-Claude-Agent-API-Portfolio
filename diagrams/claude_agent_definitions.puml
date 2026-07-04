@@ -1,0 +1,228 @@
+@startuml Claude AgentDefinitions Architecture
+allowmixing
+
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam ArrowColor #3B4A6B
+skinparam ArrowThickness 1.5
+skinparam NoteBorderColor #888888
+skinparam NoteBackgroundColor #FFFFF0
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam PackageBorderColor #3B4A6B
+skinparam PackageBackgroundColor #F0F4FF
+skinparam ClassBackgroundColor #EAF2FB
+skinparam ClassBorderColor #3B4A6B
+skinparam ComponentBackgroundColor #DDEEFF
+skinparam ComponentBorderColor #3B4A6B
+
+title Claude Agent SDK — AgentDefinition Patterns
+
+' ─────────────────────────────────────────────
+' KEY CLASSES
+' ─────────────────────────────────────────────
+package "claude_agent_sdk" {
+
+  class ClaudeAgentOptions {
+    + allowed_tools : list[str]
+    + agents : dict[str, AgentDefinition]
+    + system_prompt : str
+    + model : str
+    + permission_mode : str
+    + max_turns : int
+    + cwd : str | Path
+  }
+
+  class AgentDefinition {
+    + description : str
+    + prompt : str
+    + tools : list[str]
+  }
+
+  class query {
+    + prompt : str
+    + options : ClaudeAgentOptions
+    --
+    returns AsyncIterator[Message]
+  }
+
+  abstract class Message {}
+
+  class AssistantMessage {
+    + content : list[Block]
+    + parent_tool_use_id : str
+  }
+
+  class ResultMessage {
+    + result : str
+    + parent_tool_use_id : str
+  }
+
+  class ToolUseBlock {
+    + name : str
+    + input : dict
+  }
+
+  class TextBlock {
+    + text : str
+  }
+
+  ClaudeAgentOptions "1" *--> "0..*" AgentDefinition : agents dict
+  query --> ClaudeAgentOptions : uses
+  query ..> Message : yields
+  Message <|-- AssistantMessage
+  Message <|-- ResultMessage
+  AssistantMessage "1" *--> "1..*" ToolUseBlock
+  AssistantMessage "1" *--> "0..*" TextBlock
+}
+
+' ─────────────────────────────────────────────
+' PATTERN 1: SINGLE SUBAGENT
+' ─────────────────────────────────────────────
+package "Pattern 1 — Single Subagent" #E8F8E8 {
+  component "Orchestrator\n(Claude)" as ORC1
+  component "code-reviewer\n[Read, Glob, Grep]" as CR
+
+  ORC1 -right-> CR : calls via\n\"Agent\" tool
+  CR -right-> ORC1 : review result
+}
+
+' ─────────────────────────────────────────────
+' PATTERN 2: MULTIPLE SUBAGENTS
+' ─────────────────────────────────────────────
+package "Pattern 2 — Multiple Subagents" #FFF4E0 {
+  component "Orchestrator\n(Claude)" as ORC2
+  component "security-auditor\n[Read, Grep]" as SA
+  component "performance-analyst\n[Read]" as PA
+  component "doc-writer\n[none]" as DW
+
+  ORC2 -down-> SA : spawn
+  ORC2 -down-> PA : spawn
+  ORC2 -down-> DW : spawn
+  SA -up-> ORC2 : findings
+  PA -up-> ORC2 : analysis
+  DW -up-> ORC2 : docstrings
+
+  note bottom of ORC2
+    Orchestrator synthesises all
+    subagent results into one report
+  end note
+}
+
+' ─────────────────────────────────────────────
+' PATTERN 3: FILE-AWARE SUBAGENT
+' ─────────────────────────────────────────────
+package "Pattern 3 — File-Aware Subagent" #F3E8FF {
+  folder "Project Dir (cwd)" as DIR {
+    [main.py]
+    [utils.py]
+    [config.py]
+  }
+  component "Orchestrator\n(Claude)" as ORC3
+  component "file-scanner\n[Read, Glob, Grep]" as FS
+
+  ORC3 -right-> FS : spawn
+  FS -down-> DIR : reads files
+  DIR -up-> FS : file contents
+  FS -left-> ORC3 : security report
+}
+
+' ─────────────────────────────────────────────
+' PATTERN 4: SEQUENTIAL PIPELINE
+' ─────────────────────────────────────────────
+package "Pattern 4 — Sequential Pipeline" #FDE8E8 {
+  component "researcher\n[none]" as RS
+  component "writer\n[none]" as WR
+  component "editor\n[none]" as ED
+  component "Final Output" as OUT
+
+  RS -right-> WR : bullet points
+  WR -right-> ED : draft paragraph
+  ED -right-> OUT : polished text
+
+  note top of RS : Step 1\nGather key facts
+  note top of WR : Step 2\nDraft paragraph
+  note top of ED : Step 3\nProofread & polish
+}
+
+' ─────────────────────────────────────────────
+' PAGE 2: SEQUENCE DIAGRAM — MESSAGE TRACING
+' ─────────────────────────────────────────────
+newpage Message Flow — parent_tool_use_id Tracing
+
+skinparam sequence {
+  ArrowColor #3B4A6B
+  LifeLineBorderColor #3B4A6B
+  ParticipantBackgroundColor #EAF2FB
+  ParticipantBorderColor #3B4A6B
+  NoteBackgroundColor #FFFFF0
+  NoteBorderColor #888888
+}
+
+title Message Flow with parent_tool_use_id Tracing
+
+actor "User Code" as USER
+participant "query()" as Q
+participant "Orchestrator\n(Claude)" as ORCH
+participant "Subagent\n(AgentDefinition)" as SUB
+
+USER -> Q : query(prompt, options)
+activate Q
+
+Q -> ORCH : send prompt
+activate ORCH
+
+ORCH -> Q : AssistantMessage\n(ToolUseBlock: Agent)\n[orchestrator level]
+Q --> USER : yield AssistantMessage
+
+ORCH -> SUB : spawn via Agent tool
+activate SUB
+
+SUB -> Q : AssistantMessage\n[parent_tool_use_id = tool_id]
+Q --> USER : yield AssistantMessage (subagent)
+
+SUB -> Q : ResultMessage\n[parent_tool_use_id = tool_id]
+Q --> USER : yield ResultMessage (subagent)
+deactivate SUB
+
+ORCH -> Q : ResultMessage\n(final consolidated result)\n[no parent_tool_use_id]
+Q --> USER : yield ResultMessage (orchestrator)
+deactivate ORCH
+deactivate Q
+
+note over USER, SUB
+  Subagent messages carry parent_tool_use_id,
+  linking them to the orchestrator's Agent tool call.
+  Top-level orchestrator messages have no parent_tool_use_id.
+end note
+
+' ─────────────────────────────────────────────
+' PAGE 3: REQUIRED CONFIGURATION CHECKLIST
+' ─────────────────────────────────────────────
+newpage Quick-Reference — Required Configuration
+
+title AgentDefinition — Required Configuration
+
+rectangle "ClaudeAgentOptions" #EAF2FB {
+  rectangle "allowed_tools must include \"Agent\"" as AT #FFDDDD
+  rectangle "agents = { name: AgentDefinition(...) }" as AG #DDFFDD
+  rectangle "model  (optional, defaults to claude-sonnet)" as MD #DDDDFF
+  rectangle "cwd  (optional, for file-aware subagents)" as CW #FFEDCC
+  rectangle "permission_mode = \"acceptEdits\"  (optional)" as PM #FFEDCC
+}
+
+rectangle "AgentDefinition fields" #E8F8E8 {
+  rectangle "description — helps orchestrator decide when to invoke" as DS #FFFFF0
+  rectangle "prompt — system prompt governing subagent behaviour" as PR #FFFFF0
+  rectangle "tools — e.g. Read | Write | Glob | Grep | Bash" as TR #FFFFF0
+}
+
+note bottom
+  Built-in tool names:
+  Read  |  Write  |  Edit  |  Bash
+  Glob  |  Grep   |  WebSearch  |  WebFetch
+  Custom tools require create_sdk_mcp_server() + @tool decorator.
+end note
+
+@enduml

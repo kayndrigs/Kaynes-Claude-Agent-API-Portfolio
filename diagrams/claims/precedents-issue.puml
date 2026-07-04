@@ -1,0 +1,236 @@
+@startuml Coordinator-Managed Parallel Subagent Architecture
+
+' ─────────────────────────────────────────────
+'  Skin & Theme
+' ─────────────────────────────────────────────
+skinparam backgroundColor #F8F9FA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam roundcorner 12
+skinparam sequenceArrowThickness 2
+skinparam sequenceArrowColor #37474F
+skinparam sequenceLifeLineBorderColor #B0BEC5
+skinparam sequenceLifeLineBackgroundColor #ECEFF1
+
+skinparam participant {
+  BackgroundColor #ECEFF1
+  BorderColor #455A64
+  FontStyle bold
+}
+
+skinparam actor {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #F9A825
+  FontSize 11
+}
+
+skinparam group {
+  BackgroundColor transparent
+  FontStyle bold
+  FontSize 12
+}
+
+title Coordinator-Managed Parallel Subagent Architecture\nReducing Legal Precedent Analysis Latency
+
+' ─────────────────────────────────────────────
+'  Participants
+' ─────────────────────────────────────────────
+actor       "User / System"           as U    #E3F2FD
+participant "Coordinator"             as CO   #E8EAF6
+participant "DocAgent-1\n(P1–P4)"     as DA1  #E0F7FA
+participant "DocAgent-2\n(P5–P8)"     as DA2  #E0F7FA
+participant "DocAgent-3\n(P9–P12)"    as DA3  #E0F7FA
+participant "Aggregator"              as AG   #FFF3E0
+participant "Synthesis Agent"         as SA   #F3E5F5
+
+' ─────────────────────────────────────────────
+'  PART 1 — THE PROBLEM (Sequential)
+' ─────────────────────────────────────────────
+== ❌ BEFORE — Sequential Processing (3+ minutes) ==
+
+U  ->  CO  : analyze landmark case\n(12 precedents)
+
+note over CO
+  Single DocAgent processes
+  P1 → P2 → P3 → … → P12
+  one at a time — no parallelism.
+end note
+
+CO -> DA1 : analyze P1
+DA1 --> CO : result P1  [~15s]
+CO -> DA1 : analyze P2
+DA1 --> CO : result P2  [~15s]
+CO -> DA1 : analyze P3..P12
+DA1 --> CO : results P3–P12  [~150s]
+
+note over CO, DA1
+  Total wall-clock time ≈ 12 × 15s = 180s (3 min+)
+  Coordinator is blocked waiting.
+  No parallelism. No observability during processing.
+end note
+
+' ─────────────────────────────────────────────
+'  PART 2 — CORRECT ANSWER (Coordinator Parallel Fan-Out)
+' ─────────────────────────────────────────────
+== ✅ AFTER — Coordinator-Managed Parallel Fan-Out (Option C) ==
+
+U  ->  CO  : analyze landmark case\n(12 precedents)
+
+CO -> CO : partition precedents into\n3 subsets of 4
+
+note over CO
+  Coordinator owns the fan-out plan.
+  It decides subset size, spawn count,
+  assigns work, and holds full visibility
+  into every spawned subagent.
+end note
+
+CO ->  DA1 : spawn + assign(P1, P2, P3, P4)
+CO ->  DA2 : spawn + assign(P5, P6, P7, P8)
+CO ->  DA3 : spawn + assign(P9, P10, P11, P12)
+
+note over CO
+  All three subagents run in parallel.
+  Coordinator polls / awaits all three
+  simultaneously — not sequentially.
+end note
+
+group Parallel Execution (~15s wall-clock)
+  DA1 -> DA1 : analyze P1→P4
+  DA2 -> DA2 : analyze P5→P8
+  DA3 -> DA3 : analyze P9→P12
+end
+
+DA1 --> CO : AnalysisResult{P1..P4, citations[], findings[]}
+DA2 --> CO : AnalysisResult{P5..P8, citations[], findings[]}
+DA3 --> CO : AnalysisResult{P9..P12, citations[], findings[]}
+
+note over CO
+  Wall-clock time ≈ 15s
+  (cost of one subset, not 12 sequential precedents)
+  Coordinator received structured results from all agents.
+end note
+
+CO ->  AG  : aggregate([Result_DA1, Result_DA2, Result_DA3])
+
+note right of AG
+  Aggregation responsibilities:
+  • Merge findings[] across all subsets
+  • Deduplicate overlapping citations
+  • Resolve conflicts (flag contradictions)
+  • Validate citation coverage per precedent
+  • Produce unified AnalysisBundle
+end note
+
+AG --> CO : AnalysisBundle (all 12 precedents)
+CO ->  SA  : synthesize(AnalysisBundle)
+SA --> CO  : final legal analysis report
+CO -->  U  : ✅ Final Report (~15–20s total)
+
+' ─────────────────────────────────────────────
+'  PART 3 — WHY THE OTHER OPTIONS FAIL
+' ─────────────────────────────────────────────
+== ❌ Option A — Recursive Agent Hierarchy ==
+
+note across
+  Option A: Recursive Agent Hierarchy — Why It Fails
+  ──────────────────────────────────────────────────────────────────────
+  Coordinator
+    └─ AnalysisAgent
+         ├─ SubAgent (P1–P6)
+         │    ├─ ChildAgent (P1–P3)
+         │    │    ├─ LeafAgent (P1)
+         │    │    └─ LeafAgent (P2–P3)
+         │    └─ ChildAgent (P4–P6) → ...
+         └─ SubAgent (P7–P12) → ...
+
+  PROBLEMS:
+  ❌ Debug/monitoring: Coordinator cannot see into nested layers directly.
+     A failure at LeafAgent(P1) is invisible until it bubbles up multiple hops.
+  ❌ Latency: Recursion adds spawn-and-wait overhead at every layer.
+     No real speedup beyond the first fan-out — same wall-clock as flat parallelism
+     but with extra coordination cost.
+  ❌ Error propagation: A crash in a mid-level node orphans entire subtrees.
+  ❌ Complexity: Dynamic tree depth makes the execution graph non-deterministic.
+end note
+
+' ─────────────────────────────────────────────
+== ❌ Option B — External Message Queue ==
+
+note across
+  Option B: Message Queue with Worker Agents — Why It Fails
+  ──────────────────────────────────────────────────────────────────────
+  Coordinator → Queue → [Worker1, Worker2, Worker3, ...]
+
+  PROBLEMS:
+  ❌ Observability: Coordinator pushes tasks to the queue and loses direct
+     awareness of which worker picked up which task.
+  ❌ Aggregation timing: Coordinator must poll or subscribe to know when
+     ALL 12 precedents are done — hard to correlate results to tasks.
+  ❌ Debugging: A failed task sits in a dead-letter queue; the coordinator
+     has no structured AnalysisResult to inspect, only an absence.
+  ❌ Added infrastructure: Requires external broker (Kafka, SQS, etc.),
+     adding failure modes and operational overhead outside the agent system.
+  ❌ Violates single-hub principle: Monitoring is split between the
+     coordinator and the queue dashboard — no single source of truth.
+end note
+
+' ─────────────────────────────────────────────
+== ❌ Option D — Subagent Self-Spawning (User's Pick) ==
+
+note across
+  Option D: DocAgent Spawns Its Own Subagents Dynamically — Why It Fails
+  ──────────────────────────────────────────────────────────────────────
+  Coordinator
+    └─ DocAgent
+         ├─ (dynamically spawns) SpecializedAgent(P1)
+         ├─ (dynamically spawns) SpecializedAgent(P2)
+         └─ ... (dynamic, coordinator cannot predict or observe)
+
+  PROBLEMS:
+  ❌ Hidden execution: Coordinator spawned ONE DocAgent.
+     It does not know DocAgent internally spun up 12 children.
+     From the coordinator's view: one black box, unknown state.
+  ❌ Monitoring gap: If SpecializedAgent(P7) fails, the coordinator
+     sees only a delayed or missing DocAgent result — no granularity.
+  ❌ Debug incompleteness: Stack traces, partial results, and logs
+     are buried inside DocAgent — coordinator's debug view is incomplete.
+  ❌ Resource control: Coordinator cannot set parallelism limits or
+     prioritize subsets — DocAgent self-determines load.
+  ❌ No aggregation hub: Each dynamic child's output is stitched inside
+     DocAgent, not at a neutral aggregation layer the coordinator controls.
+  ──────────────────────────────────────────────────────────────────────
+  This is the user's chosen answer. It achieves parallelism but sacrifices
+  the coordinator's ability to monitor, debug, and control execution —
+  the exact requirement stated in the problem.
+end note
+
+' ─────────────────────────────────────────────
+'  PART 4 — COMPARATIVE SUMMARY
+' ─────────────────────────────────────────────
+== Summary: Why Option C Wins on All Three Axes ==
+
+note across
+  Evaluation Matrix
+  ──────────────────────────────────────────────────────────────────────────────────────
+  │ Criterion                  │  A (Recursive) │  B (Queue)  │  C (Coordinator ✅) │  D (Self-Spawn) │
+  ├────────────────────────────┼────────────────┼─────────────┼─────────────────────┼─────────────────┤
+  │ Latency reduction          │  Partial       │  Yes        │  ✅ Yes              │  Yes            │
+  │ Coordinator monitoring     │  ❌ Broken     │  ❌ Broken  │  ✅ Full visibility  │  ❌ Broken      │
+  │ Coordinator debug view     │  ❌ Indirect   │  ❌ Absent  │  ✅ Direct results   │  ❌ Incomplete  │
+  │ Single aggregation hub     │  ❌ Scattered  │  ❌ Queue   │  ✅ Coordinator owns │  ❌ DocAgent    │
+  │ Scope tight per subagent   │  Variable      │  Per task   │  ✅ Fixed subset     │  Dynamic        │
+  │ Error containment          │  ❌ Tree-wide  │  ❌ DLQ     │  ✅ Per-subagent     │  ❌ Hidden      │
+  │ Implementation simplicity  │  ❌ Complex    │  ❌ Infra   │  ✅ Simple fan-out   │  Moderate       │
+  ──────────────────────────────────────────────────────────────────────────────────────
+  Option C is the ONLY design that simultaneously reduces latency AND
+  preserves the coordinator as a single, trusted hub for spawning,
+  monitoring, aggregation, and debugging.
+end note
+
+@enduml

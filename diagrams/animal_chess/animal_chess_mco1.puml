@@ -1,0 +1,181 @@
+@startuml AnimalChess_MCO1
+
+' =====================================================================
+' ANIMAL CHESS - MCO1 CLASS DIAGRAM (Phase 1: movement only, no trap, console)
+' Scope intentionally excludes: Trap terrain, GUI, MVC split (that's MCO2)
+' =====================================================================
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+enum AnimalType {
+  ELEPHANT
+  LION
+  TIGER
+  LEOPARD
+  DOG
+  WOLF
+  CAT
+  MOUSE
+  --
+  + getRank(): int
+}
+note right of AnimalType
+  **(1)** Rank lives INSIDE the enum
+  (e.g. ELEPHANT=8 ... MOUSE=1).
+  This is why we don't need 8
+  separate Animal subclasses —
+  rank + type is just data, not
+  behavior, for 5 of the 8 animals.
+end note
+
+enum TerrainType {
+  LAND
+  RIVER
+  DEN
+}
+note right of TerrainType
+  **(2)** TRAP is deliberately
+  left out — MCO1 spec says
+  "all terrains except trap."
+  Adding it now would be
+  speculative (YAGNI).
+end note
+
+class Position {
+  - row: int
+  - col: int
+  --
+  + equals(o: Object): boolean
+}
+note left of Position
+  **(3)** Small value object.
+  Used by Animal + Space so we
+  don't pass raw (row, col) ints
+  everywhere — cheap encapsulation.
+end note
+
+class Animal {
+  - type: AnimalType
+  - owner: Player
+  - position: Position
+  --
+  + getRank(): int
+  + canMoveTo(board: Board, target: Position): boolean
+  + canCapture(target: Animal): boolean
+  + moveTo(target: Position): void
+}
+note right of Animal
+  **(4)** ONE concrete class for
+  all 8 animals. Special-case
+  logic (mouse-on-river,
+  lion/tiger jump, elephant-vs-
+  mouse capture) is just a few
+  conditionals inside
+  canMoveTo()/canCapture() that
+  branch on `type`. KISS: no
+  inheritance tree needed when
+  3 animals differ slightly,
+  not all 8 differ completely.
+end note
+
+class Space {
+  - terrain: TerrainType
+  - occupant: Animal
+  - denOwner: Player
+  --
+  + isOccupied(): boolean
+  + isOpponentDen(p: Player): boolean
+}
+note left of Space
+  **(5)** denOwner is null for
+  LAND/RIVER, set only when
+  terrain == DEN. Avoids a
+  separate Den subclass for
+  one extra field.
+end note
+
+class Board {
+  - grid: Space[9][7]
+  --
+  + getSpace(pos: Position): Space
+  + isWithinBounds(pos: Position): boolean
+  + moveAnimal(a: Animal, target: Position): void
+}
+note right of Board
+  **(6)** Owns the 9x7 grid and
+  is the ONLY class that touches
+  the raw array — Game and
+  Animal go through Board's
+  methods (information hiding).
+end note
+
+class Player {
+  - name: String
+  - color: String
+  - animals: List<Animal>
+  --
+  + hasWon(): boolean
+}
+
+class Game {
+  - board: Board
+  - players: Player[2]
+  - currentPlayerIndex: int
+  --
+  + start(): void
+  + switchTurn(): void
+  + checkWinner(): Player
+}
+note right of Game
+  **(7)** Game = the rules
+  referee. It does NOT do
+  console I/O itself, so the
+  movement/win logic can be
+  reused untouched when MCO2
+  swaps console for GUI.
+end note
+
+class AnimalChessConsole {
+  - game: Game
+  --
+  + main(args: String[]): void
+  + promptDirection(): char
+  + displayBoard(): void
+}
+note bottom of AnimalChessConsole
+  **(8)** The ONLY class that
+  reads L/R/U/D from System.in
+  and prints to console. Keeping
+  all I/O here means Game/Board/
+  Animal stay UI-agnostic — this
+  is the seam MCO2's GUI will
+  plug into instead.
+end note
+
+' ===================== RELATIONSHIPS =====================
+
+AnimalChessConsole "1" *-- "1" Game : drives >
+Game "1" *-- "1" Board : manages >
+Game "1" *-- "2" Player : has >
+Board "1" *-- "63" Space : contains >
+Player "1" *-- "8" Animal : owns >
+Space "1" o-- "0..1" Animal : occupant >
+Animal "1" -- "1" AnimalType : type
+Animal "1" -- "1" Position : position
+Space "1" -- "1" TerrainType : terrain
+Space "0..1" -- "0..1" Player : denOwner
+
+note as Walkthrough
+  **(9) Read order:** start at AnimalChessConsole (entry point) →
+  Game (turn loop + win check) → Board (grid + bounds) → Space
+  (one cell's terrain/occupant) → Animal (the moving piece) →
+  AnimalType/Position (the small data it relies on).
+
+  **(10) What's NOT here on purpose:** Trap rules, GUI classes,
+  Controller/View split, Computer-player AI. All explicitly out
+  of scope per MCO1 — adding them now is speculative complexity
+  that MCO2 will force a redesign of anyway.
+end note
+
+@enduml

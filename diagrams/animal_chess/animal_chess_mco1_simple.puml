@@ -1,0 +1,140 @@
+@startuml AnimalChess_MCO1
+
+' =====================================================================
+' ANIMAL CHESS - MCO1 CLASS DIAGRAM (Phase 1: movement only, no trap, console)
+' No enums, no extra helper classes - just plain fields. KISS.
+' =====================================================================
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+class Animal {
+  - type: String
+  - rank: int
+  - owner: Player
+  - row: int
+  - col: int
+  --
+  + canMoveTo(board: Board, targetRow: int, targetCol: int): boolean
+  + canCapture(target: Animal): boolean
+  + moveTo(targetRow: int, targetCol: int): void
+}
+note right of Animal
+  **(1)** ONE class for all 8
+  animals. "type" is just a
+  String ("Elephant", "Mouse",
+  etc.) and "rank" is just an
+  int (8 down to 1) - set once
+  in the constructor.
+
+  No enum, no 8 subclasses.
+  The few special cases (mouse
+  on river, lion/tiger jump,
+  elephant-vs-mouse capture)
+  are just if-checks on `type`
+  inside canMoveTo()/canCapture().
+end note
+
+class Space {
+  - terrain: String
+  - occupant: Animal
+  - denOwner: Player
+  --
+  + isOccupied(): boolean
+  + isOpponentDen(p: Player): boolean
+}
+note left of Space
+  **(2)** terrain is just a
+  String: "Land", "River", or
+  "Den". Trap is left out
+  entirely - not in MCO1 scope.
+
+  denOwner stays null unless
+  terrain is "Den".
+end note
+
+class Board {
+  - grid: Space[9][7]
+  --
+  + getSpace(row: int, col: int): Space
+  + isWithinBounds(row: int, col: int): boolean
+  + moveAnimal(a: Animal, targetRow: int, targetCol: int): void
+}
+note right of Board
+  **(3)** Owns the 9x7 grid.
+  Game and Animal only ever
+  call Board's methods, never
+  touch the array directly.
+end note
+
+class Player {
+  - name: String
+  - color: String
+  - animals: Animal[8]
+  --
+  + hasWon(): boolean
+}
+note left of Player
+  **(4)** Just holds the 8
+  pieces a player owns plus
+  their display color.
+end note
+
+class Game {
+  - board: Board
+  - players: Player[2]
+  - currentPlayerIndex: int
+  --
+  + start(): void
+  + switchTurn(): void
+  + checkWinner(): Player
+}
+note right of Game
+  **(5)** The rules referee.
+  Has zero System.in/System.out
+  calls - that's all delegated
+  to the console class below.
+  This keeps the door open for
+  swapping in a GUI later
+  without touching this class.
+end note
+
+class AnimalChessConsole {
+  - game: Game
+  --
+  + main(args: String[]): void
+  + promptDirection(): char
+  + displayBoard(): void
+}
+note bottom of AnimalChessConsole
+  **(6)** The ONLY class that
+  reads L/R/U/D and prints the
+  board. Entry point of the
+  program (has main()).
+end note
+
+' ===================== RELATIONSHIPS =====================
+
+AnimalChessConsole "1" *-- "1" Game : drives >
+Game "1" *-- "1" Board : manages >
+Game "1" *-- "2" Player : has >
+Board "1" *-- "63" Space : contains >
+Player "1" *-- "8" Animal : owns >
+Space "1" o-- "0..1" Animal : occupant >
+Space "0..1" -- "0..1" Player : denOwner
+
+note as Walkthrough
+  **(7) Read order:** AnimalChessConsole (entry point, has main())
+  -> Game (turn loop + win check) -> Board (the 9x7 grid) ->
+  Space (one cell - terrain/occupant) -> Animal (the piece) ->
+  back up to Player (who owns it).
+
+  **(8) Why no enums:** "type" and "terrain" are just Strings,
+  "rank" is just an int. Simplest possible representation -
+  swap to enums later in MCO2 if it's actually causing bugs.
+
+  **(9) Still NOT here on purpose:** Trap rules, GUI classes,
+  Controller/View split, AI opponent. All out of MCO1 scope.
+end note
+
+@enduml

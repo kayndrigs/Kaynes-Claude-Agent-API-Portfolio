@@ -1,0 +1,251 @@
+@startuml Claim-Source Mapping Architecture
+
+' ─────────────────────────────────────────────
+'  Skin & Theme
+' ─────────────────────────────────────────────
+skinparam backgroundColor #F8F9FA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam roundcorner 12
+skinparam sequenceArrowThickness 2
+skinparam sequenceArrowColor #455A64
+skinparam sequenceLifeLineBorderColor #B0BEC5
+skinparam sequenceLifeLineBackgroundColor #ECEFF1
+
+skinparam participant {
+  BackgroundColor #ECEFF1
+  BorderColor #455A64
+  FontStyle bold
+}
+
+skinparam actor {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #F9A825
+  FontSize 11
+}
+
+skinparam group {
+  BackgroundColor transparent
+  BorderColor #78909C
+  FontStyle bold
+  FontSize 12
+}
+
+skinparam arrow {
+  Color #37474F
+}
+
+title Claim-Source Mapping Architecture\nMulti-Agent Synthesis with Citation Preservation
+
+' ─────────────────────────────────────────────
+'  Participants
+' ─────────────────────────────────────────────
+actor       "User"                    as U       #E3F2FD
+participant "Orchestrator"            as O       #E8EAF6
+participant "Web Search\nAgent"       as WSA     #E0F7FA
+participant "Document\nAnalysis Agent" as DAA    #F3E5F5
+participant "Synthesis Agent"         as SA      #FFF3E0
+database    "Source Registry"         as SR      #E8F5E9
+
+' ─────────────────────────────────────────────
+'  1. Query Dispatch
+' ─────────────────────────────────────────────
+== 1 · Query Dispatch ==
+
+U  ->  O  : submit query
+O  ->  WSA : dispatch(search_task)
+O  ->  DAA : dispatch(document_task)
+
+' ─────────────────────────────────────────────
+'  2. Subagent: Web Search
+' ─────────────────────────────────────────────
+== 2 · Subagents Produce Structured ClaimSourceMappings ==
+
+group Web Search Agent
+  WSA -> WSA : fetch & rank web results
+  WSA -> WSA : extract claims from content
+  WSA ->  SR : register(source_id → {url, title, snippets[]})
+
+  note right of WSA
+    ClaimSourceMapping — WSA Output
+    ─────────────────────────────────────
+    {
+      "claims": [
+        {
+          "claim_id"  : "c1",
+          "text"      : "X increases Y by 30%",
+          "citations" : [
+            { "source_id": "s1", "snippet_idx": 2 },
+            { "source_id": "s2", "snippet_idx": 0 }
+          ]
+        },
+        {
+          "claim_id"  : "c2",
+          "text"      : "Adoption rate doubled in 2024",
+          "citations" : [
+            { "source_id": "s2", "snippet_idx": 3 }
+          ]
+        }
+      ],
+      "sources": {
+        "s1": { "url": "https://...", "snippets": ["...", "...", "
+
+"] },
+        "s2": { "url": "https://...", "snippets": ["
+
+", "...", "...", "
+
+"] }
+      }
+    }
+    ─────────────────────────────────────
+    Every claim carries at least one
+    citationId:snippetIndex pair.
+  end note
+
+  WSA --> O : ClaimSourceMapping_WSA
+end
+
+group Document Analysis Agent
+  DAA -> DAA : parse & chunk documents
+  DAA -> DAA : attribute claims to passages
+  DAA ->  SR : register(source_id → {doc_id, page, snippets[]})
+
+  note right of DAA
+    ClaimSourceMapping — DAA Output
+    ─────────────────────────────────────
+    {
+      "claims": [
+        {
+          "claim_id"  : "c3",
+          "text"      : "Studies confirm the Z pattern",
+          "citations" : [
+            { "source_id": "s3", "snippet_idx": 1 }
+          ]
+        },
+        {
+          "claim_id"  : "c4",
+          "text"      : "Failure rate drops below 5%",
+          "citations" : [
+            { "source_id": "s4", "snippet_idx": 0 },
+            { "source_id": "s4", "snippet_idx": 5 }
+          ]
+        }
+      ],
+      "sources": {
+        "s3": { "doc_id": "rpt-2024-Q3", "page": 4,  "snippets": ["...", "
+
+"] },
+        "s4": { "doc_id": "whitepaper-v2", "page": 11, "snippets": ["
+
+", ..., "
+
+"] }
+      }
+    }
+    ─────────────────────────────────────
+    Document page + snippet index are
+    preserved for deep-link citations.
+  end note
+
+  DAA --> O : ClaimSourceMapping_DAA
+end
+
+' ─────────────────────────────────────────────
+'  3. Synthesis Agent — Merge & Preserve
+' ─────────────────────────────────────────────
+== 3 · Synthesis Agent Merges & Preserves Mappings ==
+
+O  ->  SA : forward([ClaimSourceMapping_WSA, ClaimSourceMapping_DAA])
+
+SA -> SA : merge source registries\n(deduplicate, re-key on conflict)
+
+note over SA
+  Merge Algorithm
+  ─────────────────────────────────────────────
+  Step 1 — Build unified SourceRegistry
+           Merge s1…s4; on duplicate URL/doc_id,
+           keep single canonical entry, union snippets[].
+
+  Step 2 — Preserve every claim → [source:snippet] edge
+           NEVER drop a citation during combination.
+           Union citations when two agents cite the same claim.
+
+  Step 3 — Conflict resolution
+           If two agents produce contradicting claims,
+           surface BOTH with their respective citations;
+           do not silently discard either.
+
+  Step 4 — Validate coverage
+           claims with citations[]  = []  → flag UNSUPPORTED
+           UNSUPPORTED claims must NOT appear in final report
+           without explicit uncertainty markers.
+
+  Step 5 — Emit inline tags Each sentence referencing claim cN becomes: "…finding…cN:sX:snippetIdx."
+  ─────────────────────────────────────────────
+end note
+
+SA -> SA : generate narrative prose\nwith inline cN:sX:idx
+SA -> SA : produce MergedClaimSourceMap\n(full provenance graph)
+
+SA --> O : FinalReport + MergedClaimSourceMap
+
+' ─────────────────────────────────────────────
+'  4. Output Validation Gate
+' ─────────────────────────────────────────────
+== 4 · Orchestrator Validates Citation Coverage ==
+
+O -> O : parse FinalReport\ncheck every claim has ≥1 citation
+
+alt ✅ All claims cited
+  O --> U : Final Report\n(full source attribution preserved)
+else ⚠️ UNSUPPORTED claims detected
+  O --> SA : re-request with\nflagged claim_ids list
+  SA --> O  : patched FinalReport
+  O --> U  : Final Report (patched)
+end
+
+' ─────────────────────────────────────────────
+'  5. Data Structure Legend
+' ─────────────────────────────────────────────
+== 5 · ClaimSourceMapping Schema (Canonical Contract) ==
+
+note over O, SR
+  ClaimSourceMapping — Canonical Contract (all subagents MUST conform)
+  ──────────────────────────────────────────────────────────────────────
+  ClaimSourceMapping {
+    claims  : Claim[]          // ordered list of extracted claims
+    sources : Map<SourceID, Source>  // complete source registry
+  }
+
+  Claim {
+    claim_id   : string        // unique within agent scope; prefixed on merge
+    text       : string        // verbatim or paraphrased claim text
+    confidence : float         // 0.0–1.0 agent confidence score
+    citations  : Citation[]    // REQUIRED; must be non-empty
+  }
+
+  Citation {
+    source_id   : SourceID     // key into sources map
+    snippet_idx : int          // index into source.snippets[]
+  }
+
+  Source {
+    source_id : SourceID
+    type      : "web" | "document" | "database"
+    url?      : string         // for web sources
+    doc_id?   : string         // for document sources
+    page?     : int            // optional page reference
+    snippets  : string[]       // ordered array of extracted passages
+  }
+  ──────────────────────────────────────────────────────────────────────
+  Synthesis agent MUST output the same schema with merged sources.
+  Inline citation format: claim_id:source_id:snippet_idx
+end note
+
+@enduml

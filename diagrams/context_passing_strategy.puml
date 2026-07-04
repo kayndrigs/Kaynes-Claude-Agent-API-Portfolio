@@ -1,0 +1,133 @@
+@startuml
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.5
+
+skinparam participant {
+  BackgroundColor #E8F4FD
+  BorderColor #2980B9
+  FontColor #1A1A2E
+  FontStyle bold
+}
+
+skinparam note {
+  BackgroundColor #FFF9C4
+  BorderColor #F0C040
+  FontColor #333333
+}
+
+skinparam database {
+  BackgroundColor #EAF7EA
+  BorderColor #27AE60
+}
+
+title <b>Multi-Agent Pipeline: Optimal Context-Passing Strategy</b>\n<size:11>Coordinator passes Synthesis Draft + Structured Source Index to Report Generator</size>
+
+actor "User" as User
+
+box "Agent Pipeline" #F0F4FF
+  participant "Web Search\nAgent" as WSA
+  participant "Document Analysis\nAgent" as DAA
+  participant "Synthesis\nAgent" as SA
+  participant "Coordinator" as COORD
+  participant "Report Generation\nAgent" as RGA
+end box
+
+database "Source Index\n(Structured)" as SI
+
+== Phase 1: Web Search ==
+
+User -> WSA : Research request
+activate WSA
+WSA -> WSA : Crawl & retrieve sources
+note right of WSA
+  **Output:**
+  25 sources
+  ~120K tokens raw content
+end note
+WSA --> COORD : Raw content + source URLs
+deactivate WSA
+
+== Phase 2: Document Analysis ==
+
+COORD -> DAA : Forward raw content (120K tokens)
+activate DAA
+DAA -> DAA : Extract key insights\nfrom raw sources
+note right of DAA
+  **Output:**
+  Key insights
+  ~15K tokens
+end note
+DAA --> COORD : Extracted insights + claim-source mappings
+deactivate DAA
+
+== Phase 3: Synthesis ==
+
+COORD -> SA : Forward extracted insights (15K tokens)
+activate SA
+SA -> SA : Produce coherent\nnarrative draft
+note right of SA
+  **Output:**
+  Narrative draft
+  ~3K tokens
+end note
+SA --> COORD : Synthesis draft
+deactivate SA
+
+== Phase 4: Build Structured Source Index ==
+
+COORD -> SI : Compile source index\nfrom DAA claim-source mappings
+activate SI
+note over SI
+  **Source Index Structure:**
+  ┌─────────────────────────────────────┐
+  │ claim_id  → source_url + excerpt    │
+  │ claim_id  → source_url + excerpt    │
+  │ ...                                 │
+  └─────────────────────────────────────┘
+  Maps each key claim in the draft
+  to its origin URL and relevant snippet.
+  Avoids re-reading 120K tokens.
+end note
+SI --> COORD : Structured source index (~compact)
+deactivate SI
+
+== Phase 5: Optimal Context Hand-off ✅ ==
+
+COORD -> RGA : **Synthesis Draft (3K tokens)**\n+ **Structured Source Index**
+activate RGA
+
+note over COORD, RGA #D5F5E3
+  ✅ **Optimal Strategy:**
+  Pass synthesis draft + source index
+  ——————————————————————————
+  ✔ Narrative gives the story & structure
+  ✔ Source index binds claims → citations
+  ✔ No need to re-read 120K raw tokens
+  ✔ Completeness + efficiency balanced
+end note
+
+RGA -> RGA : Generate final report\nwith proper citations
+note right of RGA
+  **Uses:**
+  • Draft → narrative structure
+  • Source index → inline citations
+  • Does NOT re-read raw content
+end note
+RGA --> User : Final Report\n(with cited sources)
+deactivate RGA
+
+== ❌ Rejected Strategies (for contrast) ==
+
+note over COORD #FFE0E0
+  ❌ Pass all 120K raw tokens → token overload, inefficient
+  ❌ Pass only synthesis draft → no citation binding possible
+  ❌ Pass only source URLs → agent must re-fetch & re-read
+  ❌ Pass extracted insights only → loses narrative coherence
+end note
+
+@enduml
+
