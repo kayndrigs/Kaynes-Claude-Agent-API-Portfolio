@@ -122,9 +122,9 @@ package "Demo 2 — Multiple Subagents\n(demo_multiple_subagents)" #FFF4E0 {
 ' ─────────────────────────────────────────────
 package "Demo 3 — File-Aware Subagent\n(demo_file_aware_subagent)" #F3E8FF {
   folder "tmpdir (cwd)" as D3_DIR {
-    [main.py]
-    [utils.py]
-    [config.py\n← DEBUG=True, hardcoded secret]
+    artifact "main.py"
+    artifact "utils.py"
+    artifact "config.py (DEBUG=True, hardcoded secret)"
   }
 
   component "Orchestrator\npermission_mode=acceptEdits" as D3_ORC
@@ -171,88 +171,4 @@ package "Demo 4 — Sequential Pipeline\n(demo_sequential_pipeline)" #FDE8E8 {
 ' ─────────────────────────────────────────────
 ' PAGE 2: PARENT_TOOL_USE_ID TRACING
 ' ─────────────────────────────────────────────
-newpage Demo 5 — parent_tool_use_id Message Tracing (Section 9)
-
-skinparam sequence {
-  ArrowColor #3B4A6B
-  LifeLineBorderColor #3B4A6B
-  ParticipantBackgroundColor #EAF2FB
-  ParticipantBorderColor #3B4A6B
-  NoteBackgroundColor #FFFDE7
-  NoteBorderColor #888888
-  LifeLineBackgroundColor #FFFFFF
-}
-
-skinparam backgroundColor #FFFFFF
-
-title demo_trace_subagent_messages — parent_tool_use_id Tracing
-
-actor "asyncio.run()" as USER
-participant "query()" as Q
-participant "Orchestrator\n(Claude)" as ORCH
-participant "summarizer\n[none]" as SUB
-
-USER -> Q : query(prompt, options)
-activate Q
-
-Q -> ORCH : forward prompt
-activate ORCH
-
-ORCH -> Q : AssistantMessage\n(ToolUseBlock: Agent → summarizer)\n[origin: orchestrator]
-Q --> USER : yield — printed as\n"📨 AssistantMessage [orchestrator]"
-
-ORCH -> SUB : spawn via Agent tool\n(tool_id = \"toolu_abc123\")
-activate SUB
-
-SUB -> Q : AssistantMessage\n[parent_tool_use_id = \"toolu_abc123\"]
-Q --> USER : yield — printed as\n"📨 AssistantMessage [subagent of: toolu_abc123]"
-
-SUB -> Q : ResultMessage\n(3 bullet summary)\n[parent_tool_use_id = \"toolu_abc123\"]
-Q --> USER : yield — printed as\n"📨 ResultMessage [subagent of: toolu_abc123]"
-deactivate SUB
-
-ORCH -> Q : ResultMessage\n(final orchestrator result)\n[no parent_tool_use_id]
-Q --> USER : yield — printed as\n"📨 ResultMessage [orchestrator]"\nprints message.result
-deactivate ORCH
-deactivate Q
-
-note over USER, SUB
-  parent_tool_use_id links every subagent message
-  back to the orchestrator's Agent tool call.
-  Absence of parent_tool_use_id = orchestrator-level message.
-end note
-
-' ─────────────────────────────────────────────
-' PAGE 3: CONFIGURATION QUICK REFERENCE
-' ─────────────────────────────────────────────
-newpage Quick Reference — ClaudeAgentOptions & AgentDefinition
-
-skinparam backgroundColor #FFFFFF
-
-title Required Configuration for AgentDefinition Workflows
-
-rectangle "ClaudeAgentOptions" #EAF2FB {
-  rectangle "allowed_tools must include \"Agent\"" as AT #FFDDDD
-  rectangle "agents = { \"name\": AgentDefinition(...) }" as AG #DDFFDD
-  rectangle "model  — e.g. claude-sonnet-4-5 or claude-haiku-4-5" as MD #DDDDFF
-  rectangle "cwd  — required for file-aware subagents (Demo 3)" as CW #FFEDCC
-  rectangle "permission_mode = \"acceptEdits\"  — auto-approve writes" as PM #FFEDCC
-  rectangle "max_turns  — limits orchestrator conversation depth" as MT #FFEDCC
-  rectangle "system_prompt  — optional orchestrator-level instruction" as SP #DDFFDD
-}
-
-rectangle "AgentDefinition fields" #E8F8E8 {
-  rectangle "description — orchestrator reads this to decide when to invoke" as DS #FFFFF0
-  rectangle "prompt — system prompt governing subagent behaviour" as PR #FFFFF0
-  rectangle "tools — e.g. [] | [\"Read\"] | [\"Read\", \"Glob\", \"Grep\", \"Bash\"]" as TR #FFFFF0
-}
-
-note bottom
-  Built-in tool names:  Read | Write | Edit | Bash | Glob | Grep | WebSearch | WebFetch
-  Custom tools require: create_sdk_mcp_server() + @tool decorator
-  Model choices (notebook):
-    Orchestrator  → claude-sonnet-4-5   (complex reasoning)
-    Pipeline step → claude-haiku-4-5    (fast, lightweight)
-end note
-
 @enduml

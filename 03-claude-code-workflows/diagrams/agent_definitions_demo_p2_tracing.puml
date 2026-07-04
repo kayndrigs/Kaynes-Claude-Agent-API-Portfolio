@@ -1,0 +1,47 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam shadowing false
+
+title demo_trace_subagent_messages — parent_tool_use_id Tracing
+
+actor "asyncio.run()" as USER
+participant "query()" as Q
+participant "Orchestrator\n(Claude)" as ORCH
+participant "summarizer\n[none]" as SUB
+
+USER -> Q : query(prompt, options)
+activate Q
+
+Q -> ORCH : forward prompt
+activate ORCH
+
+ORCH -> Q : AssistantMessage\n(ToolUseBlock: Agent → summarizer)\n[origin: orchestrator]
+Q --> USER : yield — printed as\n"📨 AssistantMessage [orchestrator]"
+
+ORCH -> SUB : spawn via Agent tool\n(tool_id = \"toolu_abc123\")
+activate SUB
+
+SUB -> Q : AssistantMessage\n[parent_tool_use_id = \"toolu_abc123\"]
+Q --> USER : yield — printed as\n"📨 AssistantMessage [subagent of: toolu_abc123]"
+
+SUB -> Q : ResultMessage\n(3 bullet summary)\n[parent_tool_use_id = \"toolu_abc123\"]
+Q --> USER : yield — printed as\n"📨 ResultMessage [subagent of: toolu_abc123]"
+deactivate SUB
+
+ORCH -> Q : ResultMessage\n(final orchestrator result)\n[no parent_tool_use_id]
+Q --> USER : yield — printed as\n"📨 ResultMessage [orchestrator]"\nprints message.result
+deactivate ORCH
+deactivate Q
+
+note over USER, SUB
+  parent_tool_use_id links every subagent message
+  back to the orchestrator's Agent tool call.
+  Absence of parent_tool_use_id = orchestrator-level message.
+end note
+
+' ─────────────────────────────────────────────
+' PAGE 3: CONFIGURATION QUICK REFERENCE
+' ─────────────────────────────────────────────
+@enduml

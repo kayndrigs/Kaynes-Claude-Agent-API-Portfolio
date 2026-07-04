@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam shadowing false
+
+title Required Configuration for AgentDefinition Workflows
+
+rectangle "ClaudeAgentOptions" #EAF2FB {
+  rectangle "allowed_tools must include \"Agent\"" as AT #FFDDDD
+  rectangle "agents = { \"name\": AgentDefinition(...) }" as AG #DDFFDD
+  rectangle "model  — e.g. claude-sonnet-4-5 or claude-haiku-4-5" as MD #DDDDFF
+  rectangle "cwd  — required for file-aware subagents (Demo 3)" as CW #FFEDCC
+  rectangle "permission_mode = \"acceptEdits\"  — auto-approve writes" as PM #FFEDCC
+  rectangle "max_turns  — limits orchestrator conversation depth" as MT #FFEDCC
+  rectangle "system_prompt  — optional orchestrator-level instruction" as SP #DDFFDD
+}
+
+rectangle "AgentDefinition fields" #E8F8E8 {
+  rectangle "description — orchestrator reads this to decide when to invoke" as DS #FFFFF0
+  rectangle "prompt — system prompt governing subagent behaviour" as PR #FFFFF0
+  rectangle "tools — e.g. [] | [\"Read\"] | [\"Read\", \"Glob\", \"Grep\", \"Bash\"]" as TR #FFFFF0
+}
+
+note bottom
+  Built-in tool names:  Read | Write | Edit | Bash | Glob | Grep | WebSearch | WebFetch
+  Custom tools require: create_sdk_mcp_server() + @tool decorator
+  Model choices (notebook):
+    Orchestrator  → claude-sonnet-4-5   (complex reasoning)
+    Pipeline step → claude-haiku-4-5    (fast, lightweight)
+end note
+
+@enduml

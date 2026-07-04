@@ -1,0 +1,47 @@
+@startuml
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam shadowing false
+
+title Message Flow with parent_tool_use_id Tracing
+
+actor "User Code" as USER
+participant "query()" as Q
+participant "Orchestrator\n(Claude)" as ORCH
+participant "Subagent\n(AgentDefinition)" as SUB
+
+USER -> Q : query(prompt, options)
+activate Q
+
+Q -> ORCH : send prompt
+activate ORCH
+
+ORCH -> Q : AssistantMessage\n(ToolUseBlock: Agent)\n[orchestrator level]
+Q --> USER : yield AssistantMessage
+
+ORCH -> SUB : spawn via Agent tool
+activate SUB
+
+SUB -> Q : AssistantMessage\n[parent_tool_use_id = tool_id]
+Q --> USER : yield AssistantMessage (subagent)
+
+SUB -> Q : ResultMessage\n[parent_tool_use_id = tool_id]
+Q --> USER : yield ResultMessage (subagent)
+deactivate SUB
+
+ORCH -> Q : ResultMessage\n(final consolidated result)\n[no parent_tool_use_id]
+Q --> USER : yield ResultMessage (orchestrator)
+deactivate ORCH
+deactivate Q
+
+note over USER, SUB
+  Subagent messages carry parent_tool_use_id,
+  linking them to the orchestrator's Agent tool call.
+  Top-level orchestrator messages have no parent_tool_use_id.
+end note
+
+' ─────────────────────────────────────────────
+' PAGE 3: REQUIRED CONFIGURATION CHECKLIST
+' ─────────────────────────────────────────────
+@enduml

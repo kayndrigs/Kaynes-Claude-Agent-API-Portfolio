@@ -1,0 +1,30 @@
+@startuml
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam shadowing false
+
+title AgentDefinition — Required Configuration
+
+rectangle "ClaudeAgentOptions" #EAF2FB {
+  rectangle "allowed_tools must include \"Agent\"" as AT #FFDDDD
+  rectangle "agents = { name: AgentDefinition(...) }" as AG #DDFFDD
+  rectangle "model  (optional, defaults to claude-sonnet)" as MD #DDDDFF
+  rectangle "cwd  (optional, for file-aware subagents)" as CW #FFEDCC
+  rectangle "permission_mode = \"acceptEdits\"  (optional)" as PM #FFEDCC
+}
+
+rectangle "AgentDefinition fields" #E8F8E8 {
+  rectangle "description — helps orchestrator decide when to invoke" as DS #FFFFF0
+  rectangle "prompt — system prompt governing subagent behaviour" as PR #FFFFF0
+  rectangle "tools — e.g. Read | Write | Glob | Grep | Bash" as TR #FFFFF0
+}
+
+note bottom
+  Built-in tool names:
+  Read  |  Write  |  Edit  |  Bash
+  Glob  |  Grep   |  WebSearch  |  WebFetch
+  Custom tools require create_sdk_mcp_server() + @tool decorator.
+end note
+
+@enduml

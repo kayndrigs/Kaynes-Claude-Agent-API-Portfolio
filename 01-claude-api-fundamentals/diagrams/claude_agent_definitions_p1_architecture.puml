@@ -115,9 +115,9 @@ package "Pattern 2 — Multiple Subagents" #FFF4E0 {
 ' ─────────────────────────────────────────────
 package "Pattern 3 — File-Aware Subagent" #F3E8FF {
   folder "Project Dir (cwd)" as DIR {
-    [main.py]
-    [utils.py]
-    [config.py]
+    artifact "main.py"
+    artifact "utils.py"
+    artifact "config.py"
   }
   component "Orchestrator\n(Claude)" as ORC3
   component "file-scanner\n[Read, Glob, Grep]" as FS
@@ -149,80 +149,4 @@ package "Pattern 4 — Sequential Pipeline" #FDE8E8 {
 ' ─────────────────────────────────────────────
 ' PAGE 2: SEQUENCE DIAGRAM — MESSAGE TRACING
 ' ─────────────────────────────────────────────
-newpage Message Flow — parent_tool_use_id Tracing
-
-skinparam sequence {
-  ArrowColor #3B4A6B
-  LifeLineBorderColor #3B4A6B
-  ParticipantBackgroundColor #EAF2FB
-  ParticipantBorderColor #3B4A6B
-  NoteBackgroundColor #FFFFF0
-  NoteBorderColor #888888
-}
-
-title Message Flow with parent_tool_use_id Tracing
-
-actor "User Code" as USER
-participant "query()" as Q
-participant "Orchestrator\n(Claude)" as ORCH
-participant "Subagent\n(AgentDefinition)" as SUB
-
-USER -> Q : query(prompt, options)
-activate Q
-
-Q -> ORCH : send prompt
-activate ORCH
-
-ORCH -> Q : AssistantMessage\n(ToolUseBlock: Agent)\n[orchestrator level]
-Q --> USER : yield AssistantMessage
-
-ORCH -> SUB : spawn via Agent tool
-activate SUB
-
-SUB -> Q : AssistantMessage\n[parent_tool_use_id = tool_id]
-Q --> USER : yield AssistantMessage (subagent)
-
-SUB -> Q : ResultMessage\n[parent_tool_use_id = tool_id]
-Q --> USER : yield ResultMessage (subagent)
-deactivate SUB
-
-ORCH -> Q : ResultMessage\n(final consolidated result)\n[no parent_tool_use_id]
-Q --> USER : yield ResultMessage (orchestrator)
-deactivate ORCH
-deactivate Q
-
-note over USER, SUB
-  Subagent messages carry parent_tool_use_id,
-  linking them to the orchestrator's Agent tool call.
-  Top-level orchestrator messages have no parent_tool_use_id.
-end note
-
-' ─────────────────────────────────────────────
-' PAGE 3: REQUIRED CONFIGURATION CHECKLIST
-' ─────────────────────────────────────────────
-newpage Quick-Reference — Required Configuration
-
-title AgentDefinition — Required Configuration
-
-rectangle "ClaudeAgentOptions" #EAF2FB {
-  rectangle "allowed_tools must include \"Agent\"" as AT #FFDDDD
-  rectangle "agents = { name: AgentDefinition(...) }" as AG #DDFFDD
-  rectangle "model  (optional, defaults to claude-sonnet)" as MD #DDDDFF
-  rectangle "cwd  (optional, for file-aware subagents)" as CW #FFEDCC
-  rectangle "permission_mode = \"acceptEdits\"  (optional)" as PM #FFEDCC
-}
-
-rectangle "AgentDefinition fields" #E8F8E8 {
-  rectangle "description — helps orchestrator decide when to invoke" as DS #FFFFF0
-  rectangle "prompt — system prompt governing subagent behaviour" as PR #FFFFF0
-  rectangle "tools — e.g. Read | Write | Glob | Grep | Bash" as TR #FFFFF0
-}
-
-note bottom
-  Built-in tool names:
-  Read  |  Write  |  Edit  |  Bash
-  Glob  |  Grep   |  WebSearch  |  WebFetch
-  Custom tools require create_sdk_mcp_server() + @tool decorator.
-end note
-
 @enduml

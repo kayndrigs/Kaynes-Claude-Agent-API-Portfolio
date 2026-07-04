@@ -1,4 +1,4 @@
-@startuml AnimalChess_MCO1
+@startuml AnimalChess_MCO1_Simple
 
 ' =====================================================================
 ' ANIMAL CHESS - MCO1 CLASS DIAGRAM (Phase 1: movement only, no trap, console)
