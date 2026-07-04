@@ -1,5 +1,9 @@
 # Kayne's Claude Bedrock API Portfolio
 
+<p align="center">
+  <img src=".assets/claude-certified-architect-foundations.png" alt="Claude Certified Architect – Foundations" width="160" />
+</p>
+
 Hands-on explorations of the Claude ecosystem — API fundamentals, prompting & tool use, Claude Code workflows, and Model Context Protocol basics.
 
 Each folder maps to one exam domain from the **Claude Certified Architect – Foundations** certification.
